@@ -13,7 +13,23 @@
     "routes": [
       {
         "src": "/api/(.*)",
-        "dest": "dist/server.js"
+        "methods": ["POST"],
+        "dest": "dist/server.js",
+        "headers": {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
+      },
+      {
+        "src": "/api/(.*)",
+        "methods": ["GET"],
+        "dest": "dist/server.js",
+        "headers": {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
       },
       {
         "src": "/(.*)",
