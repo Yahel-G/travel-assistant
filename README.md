@@ -61,7 +61,7 @@ Testing ensured reliability:
 - **Retry**: Retry gave valid attractions (e.g., "BMW Welt"), with hallucination purged from Redis.
 - **Manual Tests**: Tested cities (Paris, Rome), fictional places ("Narnia"), and follow-ups for accuracy.
 - **UI and Logs**: Screenshot showed valid response post-retry, with logs detailing the process. The highlighted code in the screenshot is **commented out** during regular tests/production.
-![Recovery from (forced) hallucination](screenshots/hallucination.PNG)
+![Recovery from (forced) hallucination](public/screenshots/hallucination.PNG)
 
 ## Installation
 
