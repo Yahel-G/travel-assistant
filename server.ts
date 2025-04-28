@@ -228,7 +228,10 @@ app.post("/api/chat", async (req: any, res: any) => {
     res.status(500).json({ reply: "Sorry, an error occurred. Try again." });
   }
 });
-
+app.get("/health", (req, res) => {
+  console.log("Received /health request");
+  res.status(200).json({ status: "Server is running" });
+});
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
