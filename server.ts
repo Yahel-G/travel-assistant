@@ -97,6 +97,7 @@ interface ExternalData {
 }
 
 app.post("/api/chat", async (req: any, res: any) => {
+  console.log("Received /api/chat request:", req.body);
   const { message, username } = req.body;
   let response: any;
 

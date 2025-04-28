@@ -100,6 +100,7 @@ const packingKeywords = [
     "wear in",
 ];
 app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    console.log("Received /api/chat request:", req.body);
     const { message, username } = req.body;
     let response;
     if (!username ||
