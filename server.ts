@@ -10,7 +10,14 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 const conversation = new ConversationManager();
-
+console.log("Server starting...");
+console.log("Environment Variables:", {
+  REDIS_URL: process.env.REDIS_URL,
+  XAI_API_KEY: process.env.XAI_API_KEY,
+  WEATHER_API_KEY: process.env.WEATHER_API_KEY,
+  GEOAPIFY_API_KEY: process.env.GEOAPIFY_API_KEY,
+  PORT: process.env.PORT,
+});
 app.use(express.json());
 app.use(express.static("public"));
 
