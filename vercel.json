@@ -4,18 +4,32 @@
       {
         "src": "dist/server.js",
         "use": "@vercel/node"
+      },
+      {
+        "src": "public/**",
+        "use": "@vercel/static"
       }
     ],
     "routes": [
       {
-        "src": "/api/chat",
+        "src": "/api/(.*)",
         "methods": ["POST"],
-        "dest": "dist/server.js"
+        "dest": "dist/server.js",
+        "headers": {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
       },
       {
-        "src": "/health",
+        "src": "/api/(.*)",
         "methods": ["GET"],
-        "dest": "dist/server.js"
+        "dest": "dist/server.js",
+        "headers": {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
       },
       {
         "src": "/(.*)",
