@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Travel Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    #chat-container {
+      resize: both;
+      overflow: auto;
+      min-height: 200px;
+      max-height: 1200px;
+      width: 740px; /* Default width */
+      height: 350px; /* Default height */
+    }
+    .message {
+      white-space: pre-wrap; /* Preserve whitespace and line breaks */
+    }
+    #username {
+      width: 350px; /* Compact size for top-right placement */
+    }
+    #message {
+      width: 100%; /* Will be set dynamically via JS */
+    }
+    #send {
+      width: 80px; /* Fixed width for send button */
+    }
+    .processing {
+      color: gray;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+  <div class="w-full max-w-3xl p-4">
+    <div class="relative">
+      <div class="flex justify-between items-center mb-2">
+        <h1 class="text-2xl font-bold text-left">Travel Assistant</h1>
+        <input
+          type="text"
+          id="username"
+          placeholder="Enter username (only required for debugging)"
+          class="border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+      </div>
+      <div id="chat-container" class="bg-white border rounded-lg shadow-lg p-4 mb-4">
+        <div id="messages" class="space-y-2"></div>
+      </div>
+    </div>
+    <div class="flex space-x-2">
+      <input
+        type="text"
+        id="message"
+        placeholder="Type your message..."
+        class="border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        disabled
+      >
+      <button
+        id="send"
+        class="bg-blue-500 text-white rounded-lg px-4 py-2 hover:bg-blue-600 disabled:bg-gray-400"
+        disabled
+      >
+        Send
+      </button>
+    </div>
+  </div>
+  <script>
+    const usernameInput = document.getElementById("username");
+    const messageInput = document.getElementById("message");
+    const sendButton = document.getElementById("send");
+    const messagesDiv = document.getElementById("messages");
+    const chatContainer = document.getElementById("chat-container");
+
+    // Sync message input width with chat container
+    function syncInputWidth() {
+      const chatWidth = chatContainer.offsetWidth;
+      messageInput.style.width = `${chatWidth - 92}px`; // Subtract send button width (80px) + spacing (12px)
+    }
+    syncInputWidth(); // Initial sync
+    new ResizeObserver(syncInputWidth).observe(chatContainer); // Update on resize
+
+    // Enable/disable chat input based on username
+    usernameInput.addEventListener("input", () => {
+      const username = usernameInput.value.trim();
+      messageInput.disabled = !username;
+      sendButton.disabled = !username;
+      if (!username) {
+        messageInput.value = "";
+      }
+    });
+
+    // Send message on button click or Enter key
+    sendButton.addEventListener("click", sendMessage);
+    messageInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    async function sendMessage() {
+      const username = usernameInput.value.trim();
+      const message = messageInput.value.trim();
+      if (!username || !message) return;
+
+      // Display user message with typing effect and scroll to bottom
+      appendMessage("You", message, "text-blue-600");
+      scrollToLatest();
+      messageInput.value = "";
+      sendButton.disabled = true;
+
+      // Show processing message
+      const processingDiv = document.createElement("div");
+      processingDiv.className = "message processing";
+      processingDiv.innerHTML = `<span class="font-semibold">Assistant:</span> Processing your request...`;
+      messagesDiv.appendChild(processingDiv);
+      scrollToLatest();
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, username })
+        });
+        const data = await response.json();
+        // Remove processing message
+        messagesDiv.removeChild(processingDiv);
+        // Display response with typing effect
+        appendMessage("Assistant", data.reply, "text-gray-800");
+      } catch (error) {
+        // Remove processing message
+        messagesDiv.removeChild(processingDiv);
+        appendMessage("Assistant", "Error: Could not connect to server.", "text-red-600");
+      } finally {
+        sendButton.disabled = false;
+        scrollToLatest();
+      }
+    }
+
+    function appendMessage(sender, text, colorClass) {
+      const messageDiv = document.createElement("div");
+      messageDiv.className = `message ${colorClass}`;
+      messagesDiv.appendChild(messageDiv);
+
+      // Add scroll anchor
+      const scrollAnchor = document.createElement("div");
+      scrollAnchor.className = "scroll-anchor";
+      messagesDiv.appendChild(scrollAnchor);
+
+      // Letter-by-letter typing effect
+      let formattedText = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+      formattedText = formattedText.replace(/\n/g, "<br>");
+      const fullText = `<span class="font-semibold">${sender}:</span> ${formattedText}`;
+      let currentIndex = 0;
+      messageDiv.innerHTML = `<span class="font-semibold">${sender}:</span> `;
+
+      function typeBatch(startIndex) {
+        if (startIndex < fullText.length) {
+          const nextIndex = Math.min(startIndex + 5, fullText.length);
+          messageDiv.innerHTML = fullText.slice(0, nextIndex);
+          scrollAnchor.scrollIntoView({ block: "end" });
+          setTimeout(() => typeBatch(nextIndex), 50);
+        } else {
+          scrollAnchor.scrollIntoView({ block: "end" });
+        }
+      }
+      typeBatch(0);
+    }
+
+    // Scroll to the latest message anchor
+    function scrollToLatest() {
+      const anchors = messagesDiv.getElementsByClassName("scroll-anchor");
+      if (anchors.length > 0) {
+        anchors[anchors.length - 1].scrollIntoView({ block: "end" });
+      }
+    }
+  </script>
+</body>
+</html>
