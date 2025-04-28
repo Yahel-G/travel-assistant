@@ -139,7 +139,7 @@ Replace placeholders with your credentials.
   - `xaiApi.ts`, `weatherApi.ts`, `restCountriesApi.ts`, `geoapifyApi.ts`: API integrations.
   - `.env.example`, `package.json`, `tsconfig.json`: Configuration files.
 - **Sample Transcripts** (`transcripts.txt`):
-  - Showcases conversations for Alice (Germany trip) and Bob (Italy attractions), including hallucination recovery and context management.
+  - Showcases a few conversations examples.
 - **Prompt Engineering Notes** (`prompt_notes.md`):
   - Details chain-of-thought prompting, hallucination avoidance, and error handling decisions.
 
