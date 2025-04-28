@@ -10,14 +10,7 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 const conversation = new ConversationManager();
-console.log("Server starting...");
-console.log("Environment Variables:", {
-  REDIS_URL: process.env.REDIS_URL,
-  XAI_API_KEY: process.env.XAI_API_KEY,
-  WEATHER_API_KEY: process.env.WEATHER_API_KEY,
-  GEOAPIFY_API_KEY: process.env.GEOAPIFY_API_KEY,
-  PORT: process.env.PORT,
-});
+
 app.use(express.json());
 app.use(express.static("public"));
 
@@ -235,6 +228,16 @@ app.post("/api/chat", async (req: any, res: any) => {
     res.status(500).json({ reply: "Sorry, an error occurred. Try again." });
   }
 });
+
+console.log("Server starting...");
+console.log("Environment Variables:", {
+  REDIS_URL: process.env.REDIS_URL,
+  XAI_API_KEY: process.env.XAI_API_KEY,
+  WEATHER_API_KEY: process.env.WEATHER_API_KEY,
+  GEOAPIFY_API_KEY: process.env.GEOAPIFY_API_KEY,
+  PORT: process.env.PORT,
+});
+
 app.get("/health", (req, res) => {
   console.log("Received /health request");
   res.status(200).json({ status: "Server is running" });
