@@ -101,7 +101,7 @@ Current user query: ${userInput}
             redisKey,
             JSON.stringify({ role: "assistant", content: response })
           );
-          await this.redis.expire(redisKey, 7 * 24 * 60 * 60);
+          await this.redis.expire(redisKey, 60 * 60);
         }
         return response;
       }

@@ -93,7 +93,7 @@ Current user query: ${userInput}
                     response.toLowerCase().match(/^(valid|invalid)$/i)) {
                     if (!isValidation) {
                         yield this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
-                        yield this.redis.expire(redisKey, 7 * 24 * 60 * 60);
+                        yield this.redis.expire(redisKey, 60 * 60);
                     }
                     return response;
                 }
