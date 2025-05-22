@@ -98,6 +98,18 @@ const packingKeywords = [
     "pack for",
     "bring for",
     "wear in",
+    "weather",
+    "cold",
+    "hot",
+    "rainy",
+    "sunny",
+    "snowy",
+    "humid",
+    "dry",
+    "windy",
+    "climate",
+    "temperature",
+    "forecast",
 ];
 app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     console.log("Received /api/chat request:", req.body);

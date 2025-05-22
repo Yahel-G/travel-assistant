@@ -1,8 +1,10 @@
 import { generateResponse } from "./xaiApi";
-import Redis from "ioredis";
+import { createClient } from "@supabase/supabase-js";
+
+// import Redis from "ioredis"; // ### Removed Redis due to costs ###
 
 export class ConversationManager {
-  private redis: Redis;
+  /*private redis: Redis;
 
   constructor() {
     this.redis = new Redis(process.env.REDIS_URL!, {
@@ -13,7 +15,16 @@ export class ConversationManager {
       console.error("Redis connection error:", err)
     );
     this.redis.on("connect", () => console.log("Connected to Redis"));
+  } */
+  private supabase;
+
+  constructor() {
+    const supabaseUrl = process.env.SUPABASE_URL!;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY!;
+    this.supabase = createClient(supabaseUrl, supabaseKey);
+    console.log("Connected to Supabase for persistent storage");
   }
+
   async getAssistantResponse(
     userInput: string,
     externalData: any = {},
@@ -26,23 +37,36 @@ export class ConversationManager {
     if (!userId || userId.trim().length === 0) {
       throw new Error("Invalid userId");
     }
-    const redisKey = `conversation:${userId}:${sessionId}`;
+
+    //const redisKey = `conversation:${userId}:${sessionId}`;
 
     // Append user input to history (unless it's a retry or validation)
     if (!isRetry && !isValidation) {
-      await this.redis.lpush(
-        redisKey,
-        JSON.stringify({ role: "user", content: userInput })
-      );
-      // Set TTL to expire history after 7 days
-      await this.redis.expire(redisKey, 7 * 24 * 60 * 60);
+      await this.supabase.from("conversation_history").insert({
+        user_id: userId,
+        session_id: sessionId,
+        role: "user",
+        content: userInput,
+      });
+      /* await this.redis.lpush(redisKey, JSON.stringify({ role: "user", content: userInput }));
+      await this.redis.expire(redisKey, 7 * 24 * 60 * 60); */
     }
 
-    // Fetch full history from redis, reversing it to maintain chronological order
-    const history = await this.redis.lrange(redisKey, 0, -1);
+    const { data: history } = await this.supabase
+      .from("conversation_history")
+      .select("role, content")
+      .eq("user_id", userId)
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: true });
+
+    const parsedHistory = history || [];
+    console.log(`Supabase history for ${userId}:${sessionId}:`, parsedHistory);
+
+    /* 
+    const history = await this.redis.lrange(redisKey, 0, -1); // Fetch full history from redis, reversing it to maintain chronological order
     const parsedHistory = history.map((msg) => JSON.parse(msg)).reverse(); // Reverse to maintain chronological order
     console.log(`Redis history for ${redisKey}:`, parsedHistory);
-
+*/
     // System prompt with chain of thought and error handling
     const systemPrompt = `
 You are a travel assistant providing concise, accurate responses for travel queries (trip planning, packing, attractions) and validation queries. Follow these rules to avoid hallucinations, recover from confused responses, and handle validation:
@@ -97,11 +121,14 @@ Current user query: ${userInput}
         response.toLowerCase().match(/^(valid|invalid)$/i)
       ) {
         if (!isValidation) {
-          await this.redis.lpush(
-            redisKey,
-            JSON.stringify({ role: "assistant", content: response })
-          );
-          await this.redis.expire(redisKey, 60 * 60);
+          await this.supabase.from("conversation_history").insert({
+            user_id: userId,
+            session_id: sessionId,
+            role: "assistant",
+            content: response,
+          });
+          /* await this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
+          await this.redis.expire(redisKey, 60 * 60); */
         }
         return response;
       }
@@ -109,7 +136,7 @@ Current user query: ${userInput}
         return "Sorry, I couldn’t process that. Please clarify your destination or query.";
       }
 
-      // Force hallucination for debugging purposes (only for initial response, not retries)
+      // ## Force hallucination for debugging purposes (only for initial response, not retries) ##
       /*       if (
         !isRetry &&
         userInput.toLowerCase().includes("munich") &&
@@ -122,11 +149,13 @@ Current user query: ${userInput}
       console.log("Returning response:", response); */
 
       if (!isValidation) {
-        await this.redis.lpush(
-          redisKey,
-          JSON.stringify({ role: "assistant", content: response })
-        );
-        await this.redis.expire(redisKey, 7 * 24 * 60 * 60);
+        await this.supabase.from("conversation_history").insert({
+          user_id: userId,
+          session_id: sessionId,
+          role: "assistant",
+          content: response,
+        }); /* await this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
+        await this.redis.expire(redisKey, 7 * 24 * 60 * 60); */
       }
       return response;
     } catch (error) {
@@ -144,7 +173,15 @@ Current user query: ${userInput}
     if (!userId || userId.trim().length === 0) {
       throw new Error("Invalid userId");
     }
-    const redisKey = `conversation:${userId}:${sessionId}`;
+    await this.supabase
+      .from("conversation_history")
+      .delete()
+      .eq("user_id", userId)
+      .eq("session_id", sessionId)
+      .eq("role", "assistant")
+      .eq("content", response);
+
+    /*  const redisKey = `conversation:${userId}:${sessionId}`;
     const history = await this.redis.lrange(redisKey, 0, -1);
     const filteredHistory = history.filter((msg) => {
       const parsed = JSON.parse(msg);
@@ -153,7 +190,7 @@ Current user query: ${userInput}
     await this.redis.del(redisKey);
     if (filteredHistory.length > 0) {
       await this.redis.lpush(redisKey, ...filteredHistory);
-      await this.redis.expire(redisKey, 7 * 24 * 60 * 60);
-    }
+      await this.redis.expire(redisKey, 60 * 60);
+    } */
   }
 }

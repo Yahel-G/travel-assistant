@@ -1,6 +1,6 @@
 # Travel Assistant
 
-The **Travel Assistant** is a web-based conversational application built to demonstrate effective LLM interactions for travel planning. Developed with TypeScript, Express, and Redis Cloud, it handles trip planning, attraction queries, and packing suggestions with a focus on natural conversation, robust prompt engineering, and external API integration. The project prioritizes conversation quality, creative prompt design, error handling, and context management.
+The **Travel Assistant** is a web-based conversational application built to demonstrate effective LLM interactions for travel planning. Developed with TypeScript, Express, and Supabase, it handles trip planning, attraction queries, and packing suggestions with a focus on natural conversation, robust prompt engineering, and external API integration. The project prioritizes conversation quality, creative prompt design, error handling, and context management.
 
 ## Features
 
@@ -10,7 +10,7 @@ The **Travel Assistant** is a web-based conversational application built to demo
   - **Trip Planning**: Creates itineraries (e.g., “Plan a trip to Germany” → 7-day plan with Berlin, Munich).
   - **Attractions**: Lists city-specific attractions (e.g., “Attractions in Munich” → BMW Welt, Marienplatz).
   - **Packing Suggestions**: Provides weather-based packing lists (e.g., “Pack for Berlin” → coat, scarf).
-- **Context Management**: Maintains conversation history in Redis Cloud per user (e.g., `conversation:Alice:default`), enabling follow-ups (e.g., “More about Munich” after attractions).
+- **Context Management**: Maintains conversation history in Supabase per user (e.g., `conversation:Alice:default`), enabling follow-ups (e.g., “More about Munich” after attractions).
 - **Natural Flow**: Letter-by-letter typing effect (5 chars/50ms), auto-scrolling after sending and during typing, and a clean UI (resizable 740x350px chatbox, dynamic input scaling) ensure a helpful, engaging experience.
 
 ### Enhanced Prompt Engineering
@@ -50,15 +50,15 @@ The **Travel Assistant** is a web-based conversational application built to demo
 Hallucinations are prevented using:
 - **Prompt Engineering**: System prompt (`conversationManager.ts`) avoids fabrication, cross-checks with Geoapify, and validates attractions ("Valid"/"Invalid").
 - **Geoapify Data**: Fetches real attractions (`server.ts`) to ensure accuracy (e.g., "BMW Welt" for Munich).
-- **Validation and Retry**: Checks responses against Geoapify; if invalid (e.g., "Munich Great Wall"), validates as "Invalid," purges from Redis, and retries for valid attractions.
-- **Clean History**: Excludes validation queries from Redis using `isValidation` flag.
+- **Validation and Retry**: Checks responses against Geoapify; if invalid (e.g., "Munich Great Wall"), validates as "Invalid," purges from Supabase, and retries for valid attractions.
+- **Clean History**: Excludes validation queries from Supabase using `isValidation` flag.
 - **Edge Cases**: Rejects fictional places (e.g., "Narnia") and suggests alternatives (e.g., "Try Paris").
 
 ### Testing Process
 Testing ensured reliability:
 - **Debug Hallucination**: Forced "Munich Great Wall" for "attractions in munich" to test detection.
 - **Validation**: Logs confirmed Geoapify mismatch, triggering "Invalid."
-- **Retry**: Retry gave valid attractions (e.g., "BMW Welt"), with hallucination purged from Redis.
+- **Retry**: Retry gave valid attractions (e.g., "BMW Welt"), with hallucination purged from Supabase.
 - **Manual Tests**: Tested cities (Paris, Rome), fictional places ("Narnia"), and follow-ups for accuracy.
 - **UI and Logs**: Screenshot showed valid response post-retry, with logs detailing the process. The highlighted code in the screenshot is **commented out** during regular tests/production.
 ![Recovery from (forced) hallucination](public/screenshots/hallucination.PNG)
@@ -77,10 +77,11 @@ Testing ensured reliability:
 
    Or download from nodejs.org.
 
-2. **Redis Cloud**:
+2. **Supabase**:
 
-   - Sign up at redis.com for a free account.
-   - Get your Redis URL (e.g., `redis://default:password@host:port`).
+   - Sign up at supabase.com for a free account.
+   - Get your Supabase URL (e.g., `https://abcdefg.supabase.co`).
+   - Get your supabase anon key.
 
 3. **API Keys**:
 
@@ -103,15 +104,16 @@ Testing ensured reliability:
    npm install
    ```
 
-   Installs `express`, `ioredis`, `dotenv`, `typescript`, etc. (see `package.json`).
+   Installs `express`, `supabase-js`, `dotenv`, `typescript`, etc. (see `package.json`).
 
 3. **Create** `.env`:
 
    ```bash
-   REDIS_URL= example: redis://default:your_password@redis-1234.redislabs.com:15730
+   SUPABASE_URL= example: https://abcdefg.supabase.co
    XAI_API_KEY=your_xai_api_key
    WEATHER_API_KEY=your_openweathermap_api_key
    GEOAPIFY_API_KEY=your_geoapify_api_key
+   SUPABASE_ANON_KEY=your_supabase_anon_key
    
    ```
 
@@ -128,14 +130,14 @@ Replace placeholders with your credentials.
 
    - Open `http://localhost:3000`.
    - Enter username “Alice” and query “Attractions in Rome”.
-   - Check logs for Redis connection and API responses.
+   - Check logs for Supabase connection and API responses.
 
 ## Submission Materials
 
 - **Source Code**:
   - `index.html`: Web UI with chatbox, typing effect, auto-scrolling.
   - `server.ts`: Express server with intent detection and API integration.
-  - `conversationManager.ts`: Manages Redis history and hallucination avoidance.
+  - `conversationManager.ts`: Manages Supabase history and hallucination avoidance.
   - `xaiApi.ts`, `weatherApi.ts`, `restCountriesApi.ts`, `geoapifyApi.ts`: API integrations.
   - `.env.example`, `package.json`, `tsconfig.json`: Configuration files.
 - **Sample Transcripts** (`transcripts.txt`):

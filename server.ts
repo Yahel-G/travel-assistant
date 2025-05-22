@@ -88,6 +88,18 @@ const packingKeywords = [
   "pack for",
   "bring for",
   "wear in",
+  "weather",
+  "cold",
+  "hot",
+  "rainy",
+  "sunny",
+  "snowy",
+  "humid",
+  "dry",
+  "windy",
+  "climate",
+  "temperature",
+  "forecast",
 ];
 
 interface ExternalData {

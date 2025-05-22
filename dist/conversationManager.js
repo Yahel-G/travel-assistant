@@ -8,21 +8,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConversationManager = void 0;
 const xaiApi_1 = require("./xaiApi");
-const ioredis_1 = __importDefault(require("ioredis"));
+const supabase_js_1 = require("@supabase/supabase-js");
+// import Redis from "ioredis"; // ### Removed Redis due to costs ###
 class ConversationManager {
     constructor() {
-        this.redis = new ioredis_1.default(process.env.REDIS_URL, {
-            maxRetriesPerRequest: 3,
-            retryStrategy: (times) => Math.min(times * 50, 2000),
-        });
-        this.redis.on("error", (err) => console.error("Redis connection error:", err));
-        this.redis.on("connect", () => console.log("Connected to Redis"));
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+        this.supabase = (0, supabase_js_1.createClient)(supabaseUrl, supabaseKey);
+        console.log("Connected to Supabase for persistent storage");
     }
     getAssistantResponse(userInput_1) {
         return __awaiter(this, arguments, void 0, function* (userInput, externalData = {}, isRetry = false, isValidation = false, userId = "default", sessionId = "default") {
@@ -30,17 +26,31 @@ class ConversationManager {
             if (!userId || userId.trim().length === 0) {
                 throw new Error("Invalid userId");
             }
-            const redisKey = `conversation:${userId}:${sessionId}`;
+            //const redisKey = `conversation:${userId}:${sessionId}`;
             // Append user input to history (unless it's a retry or validation)
             if (!isRetry && !isValidation) {
-                yield this.redis.lpush(redisKey, JSON.stringify({ role: "user", content: userInput }));
-                // Set TTL to expire history after 7 days
-                yield this.redis.expire(redisKey, 7 * 24 * 60 * 60);
+                yield this.supabase.from("conversation_history").insert({
+                    user_id: userId,
+                    session_id: sessionId,
+                    role: "user",
+                    content: userInput,
+                });
+                /* await this.redis.lpush(redisKey, JSON.stringify({ role: "user", content: userInput }));
+                await this.redis.expire(redisKey, 7 * 24 * 60 * 60); */
             }
-            // Fetch full history from redis, reversing it to maintain chronological order
-            const history = yield this.redis.lrange(redisKey, 0, -1);
+            const { data: history } = yield this.supabase
+                .from("conversation_history")
+                .select("role, content")
+                .eq("user_id", userId)
+                .eq("session_id", sessionId)
+                .order("created_at", { ascending: true });
+            const parsedHistory = history || [];
+            console.log(`Supabase history for ${userId}:${sessionId}:`, parsedHistory);
+            /*
+            const history = await this.redis.lrange(redisKey, 0, -1); // Fetch full history from redis, reversing it to maintain chronological order
             const parsedHistory = history.map((msg) => JSON.parse(msg)).reverse(); // Reverse to maintain chronological order
             console.log(`Redis history for ${redisKey}:`, parsedHistory);
+        */
             // System prompt with chain of thought and error handling
             const systemPrompt = `
 You are a travel assistant providing concise, accurate responses for travel queries (trip planning, packing, attractions) and validation queries. Follow these rules to avoid hallucinations, recover from confused responses, and handle validation:
@@ -92,15 +102,21 @@ Current user query: ${userInput}
                 if (userInput.includes("Are these attractions") &&
                     response.toLowerCase().match(/^(valid|invalid)$/i)) {
                     if (!isValidation) {
-                        yield this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
-                        yield this.redis.expire(redisKey, 60 * 60);
+                        yield this.supabase.from("conversation_history").insert({
+                            user_id: userId,
+                            session_id: sessionId,
+                            role: "assistant",
+                            content: response,
+                        });
+                        /* await this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
+                        await this.redis.expire(redisKey, 60 * 60); */
                     }
                     return response;
                 }
                 if (response.length < 10 || response.includes("N/A")) {
                     return "Sorry, I couldn’t process that. Please clarify your destination or query.";
                 }
-                // Force hallucination for debugging purposes (only for initial response, not retries)
+                // ## Force hallucination for debugging purposes (only for initial response, not retries) ##
                 /*       if (
                   !isRetry &&
                   userInput.toLowerCase().includes("munich") &&
@@ -112,8 +128,13 @@ Current user query: ${userInput}
                 }
                 console.log("Returning response:", response); */
                 if (!isValidation) {
-                    yield this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
-                    yield this.redis.expire(redisKey, 7 * 24 * 60 * 60);
+                    yield this.supabase.from("conversation_history").insert({
+                        user_id: userId,
+                        session_id: sessionId,
+                        role: "assistant",
+                        content: response,
+                    }); /* await this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
+                    await this.redis.expire(redisKey, 7 * 24 * 60 * 60); */
                 }
                 return response;
             }
@@ -129,17 +150,24 @@ Current user query: ${userInput}
             if (!userId || userId.trim().length === 0) {
                 throw new Error("Invalid userId");
             }
-            const redisKey = `conversation:${userId}:${sessionId}`;
-            const history = yield this.redis.lrange(redisKey, 0, -1);
+            yield this.supabase
+                .from("conversation_history")
+                .delete()
+                .eq("user_id", userId)
+                .eq("session_id", sessionId)
+                .eq("role", "assistant")
+                .eq("content", response);
+            /*  const redisKey = `conversation:${userId}:${sessionId}`;
+            const history = await this.redis.lrange(redisKey, 0, -1);
             const filteredHistory = history.filter((msg) => {
-                const parsed = JSON.parse(msg);
-                return !(parsed.role === "assistant" && parsed.content === response);
+              const parsed = JSON.parse(msg);
+              return !(parsed.role === "assistant" && parsed.content === response);
             });
-            yield this.redis.del(redisKey);
+            await this.redis.del(redisKey);
             if (filteredHistory.length > 0) {
-                yield this.redis.lpush(redisKey, ...filteredHistory);
-                yield this.redis.expire(redisKey, 7 * 24 * 60 * 60);
-            }
+              await this.redis.lpush(redisKey, ...filteredHistory);
+              await this.redis.expire(redisKey, 60 * 60);
+            } */
         });
     }
 }
