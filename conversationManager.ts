@@ -1,21 +1,7 @@
 import { generateResponse } from "./xaiApi";
 import { createClient } from "@supabase/supabase-js";
 
-// import Redis from "ioredis"; // ### Removed Redis due to costs ###
-
 export class ConversationManager {
-  /*private redis: Redis;
-
-  constructor() {
-    this.redis = new Redis(process.env.REDIS_URL!, {
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times) => Math.min(times * 50, 2000),
-    });
-    this.redis.on("error", (err) =>
-      console.error("Redis connection error:", err)
-    );
-    this.redis.on("connect", () => console.log("Connected to Redis"));
-  } */
   private supabase;
 
   constructor() {
@@ -38,8 +24,6 @@ export class ConversationManager {
       throw new Error("Invalid userId");
     }
 
-    //const redisKey = `conversation:${userId}:${sessionId}`;
-
     // Append user input to history (unless it's a retry or validation)
     if (!isRetry && !isValidation) {
       await this.supabase.from("conversation_history").insert({
@@ -48,8 +32,6 @@ export class ConversationManager {
         role: "user",
         content: userInput,
       });
-      /* await this.redis.lpush(redisKey, JSON.stringify({ role: "user", content: userInput }));
-      await this.redis.expire(redisKey, 7 * 24 * 60 * 60); */
     }
 
     const { data: history } = await this.supabase
@@ -62,11 +44,6 @@ export class ConversationManager {
     const parsedHistory = history || [];
     console.log(`Supabase history for ${userId}:${sessionId}:`, parsedHistory);
 
-    /* 
-    const history = await this.redis.lrange(redisKey, 0, -1); // Fetch full history from redis, reversing it to maintain chronological order
-    const parsedHistory = history.map((msg) => JSON.parse(msg)).reverse(); // Reverse to maintain chronological order
-    console.log(`Redis history for ${redisKey}:`, parsedHistory);
-*/
     // System prompt with chain of thought and error handling
     const systemPrompt = `
 You are a travel assistant providing concise, accurate responses for travel queries (trip planning, packing, attractions) and validation queries. Follow these rules to avoid hallucinations, recover from confused responses, and handle validation:
@@ -127,8 +104,6 @@ Current user query: ${userInput}
             role: "assistant",
             content: response,
           });
-          /* await this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
-          await this.redis.expire(redisKey, 60 * 60); */
         }
         return response;
       }
@@ -154,8 +129,7 @@ Current user query: ${userInput}
           session_id: sessionId,
           role: "assistant",
           content: response,
-        }); /* await this.redis.lpush(redisKey, JSON.stringify({ role: "assistant", content: response }));
-        await this.redis.expire(redisKey, 7 * 24 * 60 * 60); */
+        });
       }
       return response;
     } catch (error) {
@@ -180,17 +154,5 @@ Current user query: ${userInput}
       .eq("session_id", sessionId)
       .eq("role", "assistant")
       .eq("content", response);
-
-    /*  const redisKey = `conversation:${userId}:${sessionId}`;
-    const history = await this.redis.lrange(redisKey, 0, -1);
-    const filteredHistory = history.filter((msg) => {
-      const parsed = JSON.parse(msg);
-      return !(parsed.role === "assistant" && parsed.content === response);
-    });
-    await this.redis.del(redisKey);
-    if (filteredHistory.length > 0) {
-      await this.redis.lpush(redisKey, ...filteredHistory);
-      await this.redis.expire(redisKey, 60 * 60);
-    } */
   }
 }
