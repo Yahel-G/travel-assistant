@@ -132,7 +132,7 @@ Replace placeholders with your credentials.
    - Enter username “Alice” and query “Attractions in Rome”.
    - Check logs for Supabase connection and API responses.
 
-## Submission Materials
+## Project Materials
 
 - **Source Code**:
   - `index.html`: Web UI with chatbox, typing effect, auto-scrolling.
