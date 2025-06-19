@@ -20,7 +20,7 @@ const geoapifyApi_1 = require("./geoapifyApi");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 const conversation = new conversationManager_1.ConversationManager();
 app.use(express_1.default.json());
 app.use(express_1.default.static("public"));
@@ -130,22 +130,29 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
         const country = countryMatch ? countryMatch[1].trim() : null;
         const city = cityMatch ? cityMatch[1].trim() : null;
         let externalData = {};
-        // Flexible intent detection. For a larger scope project, would use NLP libraries.
+        // Enhanced intent detection with case-insensitive matching and broader triggers
         const lowerInput = message.toLowerCase();
-        const isTripPlanning = tripPlanningKeywords.some((keyword) => lowerInput.includes(keyword)) &&
-            country;
-        const isAttractions = attractionsKeywords.some((keyword) => lowerInput.includes(keyword)) &&
-            city;
-        const isPacking = packingKeywords.some((keyword) => lowerInput.includes(keyword)) && city;
+        const isTripPlanning = tripPlanningKeywords.some((keyword) => lowerInput.includes(keyword.toLowerCase())) &&
+            (country ||
+                city ||
+                lowerInput.includes("trip") ||
+                lowerInput.includes("plan") ||
+                (city && lowerInput.includes("for")));
+        const isAttractions = attractionsKeywords.some((keyword) => lowerInput.includes(keyword.toLowerCase())) && city;
+        const isPacking = packingKeywords.some((keyword) => lowerInput.includes(keyword.toLowerCase())) &&
+            (city || lowerInput.includes("pack") || lowerInput.includes("bring"));
         console.log("Intents:", { isTripPlanning, isAttractions, isPacking });
         if (isTripPlanning) {
             const countryInfo = yield (0, restCountriesApi_1.getCountryInfo)(country);
+            console.log("Country Info fetched:", countryInfo || "None");
             externalData = { countryInfo };
         }
         else if (isAttractions || isPacking) {
             if (city) {
                 const weather = yield (0, weatherApi_1.getWeather)(city);
+                console.log("Weather fetched:", weather);
                 const attractions = isAttractions ? yield (0, geoapifyApi_1.getAttractions)(city) : null;
+                console.log("Attractions fetched:", attractions || "None");
                 externalData = { weather, attractions };
             }
             else {
@@ -157,9 +164,7 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
         if (isAttractions && city && externalData.attractions) {
             const lowerResponse = response.toLowerCase();
             const geoapifyAttractions = externalData.attractions.toLowerCase();
-            // Flexible city name check (matches "Munich", "Munich's", etc.)
             const cityRegex = new RegExp(`\\b${city.toLowerCase()}(?:'s)?\\b`, "i");
-            // Check if Geoapify attractions are used
             const usesGeoapify = geoapifyAttractions !== "No attractions found." &&
                 geoapifyAttractions
                     .split(": ")[1]
@@ -171,7 +176,6 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
                 geoapifyAttractions,
             });
             if (!cityRegex.test(lowerResponse) || !usesGeoapify) {
-                // Validate attractions with a secondary LLM query
                 const validationPrompt = `
           I’m planning a trip to ${city} and received this list of attractions: 
           ${response}
@@ -187,7 +191,6 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
                     console.warn("Potential hallucination detected:", response);
                     const retryResponse = yield conversation.getAssistantResponse(message, externalData, true, false, userId, sessionId);
                     console.log("Retry response:", retryResponse);
-                    // Purge hallucinated response and add retry response
                     yield conversation.purgeAssistantResponse(response, userId, sessionId);
                     response = retryResponse;
                 }
@@ -200,6 +203,9 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
         res.status(500).json({ reply: "Sorry, an error occurred. Try again." });
     }
 }));
+if (process.env.NODE_ENV === "debug") {
+    (() => __awaiter(void 0, void 0, void 0, function* () { return console.log(yield (0, weatherApi_1.getWeather)("New York")); }))();
+}
 app.get("/health", (req, res) => {
     console.log("Received /health request");
     res.status(200).json({ status: "Server is running" });

@@ -5,10 +5,34 @@ export class ConversationManager {
   private supabase;
 
   constructor() {
-    const supabaseUrl = process.env.SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY!;
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error("Supabase URL or anon key not configured");
+    }
     this.supabase = createClient(supabaseUrl, supabaseKey);
     console.log("Connected to Supabase for persistent storage");
+    this.supabase
+      .from("conversation_history")
+      .select("*")
+      .limit(1)
+      .then(
+        (result) => console.log("Supabase test succeeded:", result),
+        (error) => console.error("Supabase test failed:", error)
+      );
+  }
+
+  private getApproximateDate(userInput: string, history: any[]): Date {
+    const now = new Date(); // Fallback to a reasonable default if no date access
+    const match = userInput.match(/next\s+(week|month)/i);
+    if (match) {
+      const period = match[1];
+      const result = new Date(now);
+      if (period === "week") result.setDate(now.getDate() + 7);
+      else if (period === "month") result.setMonth(now.getMonth() + 1);
+      return result;
+    }
+    return now; // Default to today if no period specified
   }
 
   async getAssistantResponse(
@@ -19,7 +43,11 @@ export class ConversationManager {
     userId: string = "default",
     sessionId: string = "default"
   ): Promise<string> {
-    // Validate userId
+    const approximateDate = this.getApproximateDate(userInput, []);
+    const month = approximateDate.toLocaleString("en-US", { month: "long" });
+    const day = approximateDate.getDate();
+    const year = approximateDate.getFullYear();
+    const seasonalContext = `Approximate trip date: ${month} ${day}, ${year}. Use this date to inform weather and packing logic, overriding any default seasonal assumptions.`; // Validate userId
     if (!userId || userId.trim().length === 0) {
       throw new Error("Invalid userId");
     }
@@ -51,11 +79,11 @@ You are a travel assistant providing concise, accurate responses for travel quer
 1. **Conversation Style**: Be friendly, professional, and engaging. Keep responses concise (50-100 words) when possible unless a detailed plan is requested. Format your output for clarity (e.g., numbered lists, bullet points). Use markdown for emphasis (e.g., *italics*, **bold**).
 2. **Query Types**:
    - **Trip Planning**: Use a chain of thought to reason through the response. Break it into steps: (1) duration, (2) destinations, (3) activities. Example: "For a 7-day Italy trip: 1) Plan 7 days. 2) Visit Rome (Colosseum), Florence (Uffizi), Venice (Grand Canal). 3) Try a pasta-making class."
-   - **Packing Suggestions**: Provide a short list (3-5 items) based on destination and season/weather. Example: "For Berlin in winter: warm coat, scarf, waterproof boots."
+   - **Packing Suggestions**: Provide a short list (3-5 items) based on destination and weather data from External Data if available. (e.g., "Sunny **Munich**, 20°C: sunscreen, hat"). If weather data is unavailable, use seasonal trends for the approximate trip date.
    - **Attractions**: List 2-3 attractions with brief descriptions, prioritizing Geoapify data if provided, else use verified knowledge. Example: "In Munich: Marienplatz (city square), Nymphenburg Palace (historic estate)."
    - **Validation**: For queries asking if attractions are valid for a city (e.g., "Are the following attractions valid for Munich?"), check if they are well-known or plausible. Answer only "Valid" if all attractions are relevant, or "Invalid" if any are fictional or unrelated (e.g., "Taj Mahal" in Munich). Do not explain.
 3. **Chain of Thought for Trip Planning**:
-   - Step 0: Before responding, check if the user has provided a destination, duration, approximate date (e.g., "next month" - so you can look for weather data), travel preferences (e.g., "I love nature"), weather the trip is for business or a leisure vacation. If not, ask clarifying questions before providing suggestions.
+   - Step 0: Before responding, check if the user has provided a destination, duration, approximate date (e.g., "next month" or anything similar to "in x months/weeks" etc. - interpret as ${seasonalContext}), travel preferences (e.g., "I love nature"), weather the trip is for business or a leisure vacation. If not, ask clarifying questions before providing suggestions.
    - Step 1: Identify the destination and infer travel preferences (e.g., culture, adventure) from context or history.
    - Step 2: Suggest a reasonable duration if not specified (e.g., 7 days for international trips).
    - Step 3: Select 2-3 destinations based on popularity and diversity (e.g., capital city, cultural hub, natural site).
@@ -89,7 +117,7 @@ External Data:
 
 Current user query: ${userInput}
 `;
-
+    console.log("External Data in response generation:", externalData);
     try {
       const response = await generateResponse(systemPrompt);
       // Allow validation responses to bypass length/N/A checks

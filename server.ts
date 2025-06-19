@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 const conversation = new ConversationManager();
 
 app.use(express.json());
@@ -135,25 +135,38 @@ app.post("/api/chat", async (req: any, res: any) => {
 
     let externalData: ExternalData = {};
 
-    // Flexible intent detection. For a larger scope project, would use NLP libraries.
+    // Enhanced intent detection with case-insensitive matching and broader triggers
     const lowerInput = message.toLowerCase();
     const isTripPlanning =
-      tripPlanningKeywords.some((keyword) => lowerInput.includes(keyword)) &&
-      country;
+      tripPlanningKeywords.some((keyword) =>
+        lowerInput.includes(keyword.toLowerCase())
+      ) &&
+      (country ||
+        city ||
+        lowerInput.includes("trip") ||
+        lowerInput.includes("plan") ||
+        (city && lowerInput.includes("for")));
     const isAttractions =
-      attractionsKeywords.some((keyword) => lowerInput.includes(keyword)) &&
-      city;
+      attractionsKeywords.some((keyword) =>
+        lowerInput.includes(keyword.toLowerCase())
+      ) && city;
     const isPacking =
-      packingKeywords.some((keyword) => lowerInput.includes(keyword)) && city;
+      packingKeywords.some((keyword) =>
+        lowerInput.includes(keyword.toLowerCase())
+      ) &&
+      (city || lowerInput.includes("pack") || lowerInput.includes("bring"));
     console.log("Intents:", { isTripPlanning, isAttractions, isPacking });
 
     if (isTripPlanning) {
       const countryInfo = await getCountryInfo(country);
+      console.log("Country Info fetched:", countryInfo || "None");
       externalData = { countryInfo };
     } else if (isAttractions || isPacking) {
       if (city) {
         const weather = await getWeather(city);
+        console.log("Weather fetched:", weather);
         const attractions = isAttractions ? await getAttractions(city) : null;
+        console.log("Attractions fetched:", attractions || "None");
         externalData = { weather, attractions };
       } else {
         externalData = { weather: "No city specified", attractions: null };
@@ -173,9 +186,7 @@ app.post("/api/chat", async (req: any, res: any) => {
     if (isAttractions && city && externalData.attractions) {
       const lowerResponse = response.toLowerCase();
       const geoapifyAttractions = externalData.attractions.toLowerCase();
-      // Flexible city name check (matches "Munich", "Munich's", etc.)
       const cityRegex = new RegExp(`\\b${city.toLowerCase()}(?:'s)?\\b`, "i");
-      // Check if Geoapify attractions are used
       const usesGeoapify =
         geoapifyAttractions !== "No attractions found." &&
         geoapifyAttractions
@@ -192,7 +203,6 @@ app.post("/api/chat", async (req: any, res: any) => {
       });
 
       if (!cityRegex.test(lowerResponse) || !usesGeoapify) {
-        // Validate attractions with a secondary LLM query
         const validationPrompt = `
           I’m planning a trip to ${city} and received this list of attractions: 
           ${response}
@@ -224,7 +234,6 @@ app.post("/api/chat", async (req: any, res: any) => {
             sessionId
           );
           console.log("Retry response:", retryResponse);
-          // Purge hallucinated response and add retry response
           await conversation.purgeAssistantResponse(
             response,
             userId,
@@ -242,6 +251,9 @@ app.post("/api/chat", async (req: any, res: any) => {
   }
 });
 
+if (process.env.NODE_ENV === "debug") {
+  (async () => console.log(await getWeather("New York")))();
+}
 app.get("/health", (req, res) => {
   console.log("Received /health request");
   res.status(200).json({ status: "Server is running" });
