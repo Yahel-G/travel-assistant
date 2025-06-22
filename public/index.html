@@ -18,7 +18,7 @@
       white-space: pre-wrap; 
     }
     #username {
-      width: 350px; 
+      width: 330px;
     }
     #message {
       width: 100%; 
@@ -35,7 +35,7 @@
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
   <div class="w-full max-w-3xl p-4">
     <div class="relative">
-      <div class="flex justify-between items-center mb-2">
+      <div id="header-flex" class="flex justify-between items-center mb-2">
         <h1 class="text-2xl font-bold text-left">Travel Assistant</h1>
         <input
           type="text"
@@ -48,7 +48,7 @@
         <div id="messages" class="space-y-2"></div>
       </div>
     </div>
-    <div class="flex space-x-2">
+    <div id="input-container" class="flex space-x-2">
       <input
         type="text"
         id="message"
@@ -71,11 +71,15 @@
     const sendButton = document.getElementById("send");
     const messagesDiv = document.getElementById("messages");
     const chatContainer = document.getElementById("chat-container");
+    const inputContainer = document.getElementById("input-container");
+    const headerFlex = document.getElementById("header-flex");
 
     // Sync message input width with chat container
     function syncInputWidth() {
       const chatWidth = chatContainer.offsetWidth;
+      inputContainer.style.width = `${chatWidth}px`;
       messageInput.style.width = `${chatWidth - 92}px`; // Subtract send button width (80px) + spacing (12px)
+      headerFlex.style.width = `${chatWidth}px`
     }
     syncInputWidth(); // Initial sync
     new ResizeObserver(syncInputWidth).observe(chatContainer); // Update on resize

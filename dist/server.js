@@ -18,99 +18,17 @@ const weatherApi_1 = require("./weatherApi");
 const restCountriesApi_1 = require("./restCountriesApi");
 const geoapifyApi_1 = require("./geoapifyApi");
 const dotenv_1 = __importDefault(require("dotenv"));
+const intentDetection_1 = require("./intentDetection");
+const supabase_js_1 = require("@supabase/supabase-js");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const port = process.env.PORT || 8080;
 const conversation = new conversationManager_1.ConversationManager();
+const supabase = (0, supabase_js_1.createClient)(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+// Initialize intent detection at startup
+(0, intentDetection_1.initializeIntentDetection)();
 app.use(express_1.default.json());
 app.use(express_1.default.static("public"));
-// Intent detection keywords
-const tripPlanningKeywords = [
-    "plan",
-    "trip",
-    "travel",
-    "visit",
-    "go to",
-    "tour",
-    "arrange",
-    "organize",
-    "schedule",
-    "book",
-    "reserve",
-    "journey",
-    "vacation",
-    "getaway",
-    "adventure",
-    "head to",
-    "take a trip",
-    "go on a",
-    "plan a vacation",
-    "itinerary",
-    "route",
-    "destination",
-    "travel plan",
-    "holiday",
-    "explore",
-    "venture",
-];
-const attractionsKeywords = [
-    "attractions",
-    "things to do",
-    "places to see",
-    "sights",
-    "what to see",
-    "landmarks",
-    "points of interest",
-    "hotspots",
-    "must-see",
-    "activities",
-    "check out",
-    "look at",
-    "what to do",
-    "stuff to see",
-    "tourist spots",
-    "cultural sites",
-    "historical sites",
-    "museums",
-    "monuments",
-    "explore",
-    "discover",
-    "sightsee",
-];
-const packingKeywords = [
-    "pack",
-    "what to bring",
-    "clothing",
-    "what should i wear",
-    "prepare",
-    "gear",
-    "items",
-    "essentials",
-    "outfit",
-    "what do i need",
-    "stuff to pack",
-    "things to take",
-    "luggage",
-    "travel gear",
-    "packing list",
-    "wardrobe",
-    "supplies",
-    "pack for",
-    "bring for",
-    "wear in",
-    "weather",
-    "cold",
-    "hot",
-    "rainy",
-    "sunny",
-    "snowy",
-    "humid",
-    "dry",
-    "windy",
-    "climate",
-    "temperature",
-    "forecast",
-];
 app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     console.log("Received /api/chat request:", req.body);
     const { message, username } = req.body;
@@ -123,35 +41,63 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
     const userId = username.trim();
     const sessionId = "default"; // Static for simplicity; replace with UUID for dynamic sessions
     try {
-        const countryMatch = message.match(/to\s+([a-zA-Z\s]+?)(?:\s+(?:in|and|or|for|with|$))/i) ||
-            message.match(/to\s+([a-zA-Z\s]+)/i);
-        const cityMatch = message.match(/in\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|$))/i) ||
-            message.match(/in\s+([a-zA-Z\s]+)/i);
-        const country = countryMatch ? countryMatch[1].trim() : null;
-        const city = cityMatch ? cityMatch[1].trim() : null;
+        // Fetch conversation history to extract city context
+        const { data: history } = yield supabase
+            .from("conversation_history")
+            .select("role, content")
+            .eq("user_id", userId)
+            .eq("session_id", sessionId)
+            .order("created_at", { ascending: true });
+        const parsedHistory = history || [];
+        console.log(`Supabase history for ${userId}:${sessionId}:`, parsedHistory);
+        // Enhanced city extraction to handle variations (e.g., Napoli)
+        const currentCityMatch = message.match(/to\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|next|$))/i) ||
+            message.match(/in\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|next|$))/i) ||
+            message.match(/([a-zA-Z\s]+?)\s+(?:trip|vacation|there)/i);
+        const historicalCityMatch = parsedHistory
+            .filter((msg) => msg.role === "user")
+            .map((msg) => msg.content.match(/to\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|next|$))/i) ||
+            msg.content.match(/in\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|next|$))/i) ||
+            msg.content.match(/([a-zA-Z\s]+?)\s+(?:trip|vacation|there)/i))
+            .find((match) => match);
+        const cityMatch = currentCityMatch || historicalCityMatch;
+        const city = cityMatch ? cityMatch[1].trim().toLowerCase() : null;
+        console.log("Extracted city:", city);
         let externalData = {};
-        // Enhanced intent detection with case-insensitive matching and broader triggers
-        const lowerInput = message.toLowerCase();
-        const isTripPlanning = tripPlanningKeywords.some((keyword) => lowerInput.includes(keyword.toLowerCase())) &&
-            (country ||
-                city ||
-                lowerInput.includes("trip") ||
-                lowerInput.includes("plan") ||
-                (city && lowerInput.includes("for")));
-        const isAttractions = attractionsKeywords.some((keyword) => lowerInput.includes(keyword.toLowerCase())) && city;
-        const isPacking = packingKeywords.some((keyword) => lowerInput.includes(keyword.toLowerCase())) &&
-            (city || lowerInput.includes("pack") || lowerInput.includes("bring"));
-        console.log("Intents:", { isTripPlanning, isAttractions, isPacking });
-        if (isTripPlanning) {
-            const countryInfo = yield (0, restCountriesApi_1.getCountryInfo)(country);
-            console.log("Country Info fetched:", countryInfo || "None");
-            externalData = { countryInfo };
+        // Detect intent using sentence similarity
+        const intent = yield (0, intentDetection_1.detectIntent)(message);
+        console.log("Detected Intent:", intent);
+        // Fetch data for relevant intents, retry if previously failed
+        if (intent === "tripPlanning" || intent === "packingSuggestions") {
+            let countryInfo = "Country info unavailable.";
+            if (city) {
+                try {
+                    const weather = yield (0, weatherApi_1.getWeather)(city);
+                    console.log("Weather fetched:", weather);
+                    const country = weather.country;
+                    if (country) {
+                        countryInfo = yield (0, restCountriesApi_1.getCountryInfo)(country);
+                    }
+                    const weatherString = weather.description
+                        ? `Current weather: ${weather.description} with a temperature of ${weather.temperature}°C`
+                        : "Weather data unavailable.";
+                    externalData = { countryInfo, weather: weatherString };
+                }
+                catch (error) {
+                    console.error("Error fetching weather or country info:", error);
+                    externalData = {
+                        countryInfo: "Country info unavailable.",
+                        weather: "Weather data unavailable.",
+                    };
+                }
+            }
+            console.log("Country Info fetched:", countryInfo);
         }
-        else if (isAttractions || isPacking) {
+        else if (intent === "attractions") {
             if (city) {
                 const weather = yield (0, weatherApi_1.getWeather)(city);
+                const attractions = yield (0, geoapifyApi_1.getAttractions)(city);
                 console.log("Weather fetched:", weather);
-                const attractions = isAttractions ? yield (0, geoapifyApi_1.getAttractions)(city) : null;
                 console.log("Attractions fetched:", attractions || "None");
                 externalData = { weather, attractions };
             }
@@ -161,7 +107,7 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
         }
         response = yield conversation.getAssistantResponse(message, externalData, false, false, userId, sessionId);
         // Hallucination check for attractions
-        if (isAttractions && city && externalData.attractions) {
+        if (intent === "attractions" && city && externalData.attractions) {
             const lowerResponse = response.toLowerCase();
             const geoapifyAttractions = externalData.attractions.toLowerCase();
             const cityRegex = new RegExp(`\\b${city.toLowerCase()}(?:'s)?\\b`, "i");

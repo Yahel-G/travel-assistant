@@ -49,51 +49,69 @@ exports.getCountryInfo = getCountryInfo;
 const axios_1 = __importDefault(require("axios"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
-const REST_COUNTRIES_API_URL = "https://restcountries.com/v3.1/name";
+const REST_COUNTRIES_API_NAME_URL = "https://restcountries.com/v3.1/name";
+const REST_COUNTRIES_API_ALPHA_URL = "https://restcountries.com/v3.1/alpha";
 function getCountryInfo(country) {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e, _f;
         if (!country || typeof country !== "string" || country.trim().length < 2) {
             return "Invalid country name.";
         }
-        // Normalize input: trim, capitalize first letter of each word
+        // Normalize input: trim, capitalize first letter of each word for name-based queries
         const normalizedCountry = country
             .trim()
             .toLowerCase()
-            .replace(/\b\w/g, (char) => char.toUpperCase())
             .replace(/[^a-zA-Z\s]/g, "");
+        // Determine if input is likely a country code (2 letters)
+        const isCountryCode = /^[a-zA-Z]{2}$/.test(country.trim().toUpperCase());
+        let apiUrl = isCountryCode
+            ? `${REST_COUNTRIES_API_ALPHA_URL}/${country.trim().toUpperCase()}`
+            : `${REST_COUNTRIES_API_NAME_URL}/${encodeURIComponent(normalizedCountry.replace(/\b\w/g, (char) => char.toUpperCase()))}`;
         try {
-            const response = yield axios_1.default.get(`${REST_COUNTRIES_API_URL}/${encodeURIComponent(normalizedCountry)}`, {
+            const response = yield axios_1.default.get(apiUrl, {
                 params: { fields: "name,capital,currencies,languages,population" },
             });
-            const data = response.data[0];
-            const currency = Object.values(data.currencies)[0]
-                .name;
-            const languages = Object.values(data.languages).join(", ");
-            return `Country: ${data.name.common}, Capital: ${data.capital[0]}, Currency: ${currency}, Languages: ${languages}, Population: ${data.population.toLocaleString()}`;
+            const data = response.data;
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+                throw new Error("No country data returned");
+            }
+            const countryData = Array.isArray(data) ? data[0] : data;
+            const currency = countryData.currencies
+                ? ((_a = Object.values(countryData.currencies)[0]) === null || _a === void 0 ? void 0 : _a.name) || "N/A"
+                : "N/A";
+            const languages = countryData.languages
+                ? Object.values(countryData.languages).join(", ") || "N/A"
+                : "N/A";
+            const capital = ((_b = countryData.capital) === null || _b === void 0 ? void 0 : _b[0]) || "N/A";
+            const population = ((_c = countryData.population) === null || _c === void 0 ? void 0 : _c.toLocaleString()) || "N/A";
+            return `Country: ${countryData.name.common}, Capital: ${capital}, Currency: ${currency}, Languages: ${languages}, Population: ${population}`;
         }
         catch (error) {
-            if (((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 404) {
-                // Try partial match
+            if (((_d = error.response) === null || _d === void 0 ? void 0 : _d.status) === 404 && !isCountryCode) {
+                // Try partial match for name-based queries
                 try {
-                    const partialResponse = yield axios_1.default.get(`${REST_COUNTRIES_API_URL}/${encodeURIComponent(normalizedCountry)}`, {
+                    const partialResponse = yield axios_1.default.get(`${REST_COUNTRIES_API_NAME_URL}/${encodeURIComponent(normalizedCountry)}`, {
                         params: {
                             fields: "name,capital,currencies,languages,population",
                             partial: true,
                         },
                     });
                     const data = partialResponse.data[0];
-                    const currency = Object.values(data.currencies)[0].name;
-                    const languages = Object.values(data.languages).join(", ");
+                    const currency = data.currencies
+                        ? Object.values(data.currencies)[0].name
+                        : "N/A";
+                    const languages = data.languages
+                        ? Object.values(data.languages).join(", ")
+                        : "N/A";
                     return `Country: ${data.name.common}, Capital: ${data.capital[0]}, Currency: ${currency}, Languages: ${languages}, Population: ${data.population.toLocaleString()}`;
                 }
                 catch (partialError) {
-                    console.error("Rest Countries partial match error:", ((_b = partialError.response) === null || _b === void 0 ? void 0 : _b.data) || partialError.message);
+                    console.error("Rest Countries partial match error:", ((_e = partialError.response) === null || _e === void 0 ? void 0 : _e.data) || partialError.message);
                     return `Country info unavailable for "${normalizedCountry}".`;
                 }
             }
-            console.error("Rest Countries API error:", ((_c = error.response) === null || _c === void 0 ? void 0 : _c.data) || error.message);
-            return `Country info unavailable for "${normalizedCountry}".`;
+            console.error("Rest Countries API error:", ((_f = error.response) === null || _f === void 0 ? void 0 : _f.data) || error.message);
+            return `Country info unavailable for "${country}".`;
         }
     });
 }

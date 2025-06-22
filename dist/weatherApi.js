@@ -64,11 +64,15 @@ function getWeather(city) {
                 },
             });
             const data = response.data;
-            return `The current weather in ${city} is ${data.weather[0].description} with a temperature of ${data.main.temp}°C.`;
+            return {
+                description: data.weather[0].description,
+                temperature: data.main.temp,
+                country: data.sys.country, // e.g., "US" for United States
+            };
         }
         catch (error) {
             console.error("Error fetching weather data:", error);
-            return "Unable to fetch weather data.";
+            return { description: "unavailable", temperature: null, country: null };
         }
     });
 }

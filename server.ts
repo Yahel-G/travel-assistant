@@ -4,103 +4,24 @@ import { getWeather } from "./weatherApi";
 import { getCountryInfo } from "./restCountriesApi";
 import { getAttractions } from "./geoapifyApi";
 import dotenv from "dotenv";
+import { initializeIntentDetection, detectIntent } from "./intentDetection";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 8080;
 const conversation = new ConversationManager();
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_ANON_KEY!
+);
+
+// Initialize intent detection at startup
+initializeIntentDetection();
 
 app.use(express.json());
 app.use(express.static("public"));
-
-// Intent detection keywords
-const tripPlanningKeywords = [
-  "plan",
-  "trip",
-  "travel",
-  "visit",
-  "go to",
-  "tour",
-  "arrange",
-  "organize",
-  "schedule",
-  "book",
-  "reserve",
-  "journey",
-  "vacation",
-  "getaway",
-  "adventure",
-  "head to",
-  "take a trip",
-  "go on a",
-  "plan a vacation",
-  "itinerary",
-  "route",
-  "destination",
-  "travel plan",
-  "holiday",
-  "explore",
-  "venture",
-];
-const attractionsKeywords = [
-  "attractions",
-  "things to do",
-  "places to see",
-  "sights",
-  "what to see",
-  "landmarks",
-  "points of interest",
-  "hotspots",
-  "must-see",
-  "activities",
-  "check out",
-  "look at",
-  "what to do",
-  "stuff to see",
-  "tourist spots",
-  "cultural sites",
-  "historical sites",
-  "museums",
-  "monuments",
-  "explore",
-  "discover",
-  "sightsee",
-];
-const packingKeywords = [
-  "pack",
-  "what to bring",
-  "clothing",
-  "what should i wear",
-  "prepare",
-  "gear",
-  "items",
-  "essentials",
-  "outfit",
-  "what do i need",
-  "stuff to pack",
-  "things to take",
-  "luggage",
-  "travel gear",
-  "packing list",
-  "wardrobe",
-  "supplies",
-  "pack for",
-  "bring for",
-  "wear in",
-  "weather",
-  "cold",
-  "hot",
-  "rainy",
-  "sunny",
-  "snowy",
-  "humid",
-  "dry",
-  "windy",
-  "climate",
-  "temperature",
-  "forecast",
-];
 
 interface ExternalData {
   weather?: any;
@@ -124,48 +45,74 @@ app.post("/api/chat", async (req: any, res: any) => {
   const sessionId = "default"; // Static for simplicity; replace with UUID for dynamic sessions
 
   try {
-    const countryMatch =
-      message.match(/to\s+([a-zA-Z\s]+?)(?:\s+(?:in|and|or|for|with|$))/i) ||
-      message.match(/to\s+([a-zA-Z\s]+)/i);
-    const cityMatch =
-      message.match(/in\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|$))/i) ||
-      message.match(/in\s+([a-zA-Z\s]+)/i);
-    const country = countryMatch ? countryMatch[1].trim() : null;
-    const city = cityMatch ? cityMatch[1].trim() : null;
+    // Fetch conversation history to extract city context
+    const { data: history } = await supabase
+      .from("conversation_history")
+      .select("role, content")
+      .eq("user_id", userId)
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: true });
+
+    const parsedHistory = history || [];
+    console.log(`Supabase history for ${userId}:${sessionId}:`, parsedHistory);
+
+    // Enhanced city extraction to handle variations (e.g., Napoli)
+    const currentCityMatch =
+      message.match(/to\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|next|$))/i) ||
+      message.match(/in\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|next|$))/i) ||
+      message.match(/([a-zA-Z\s]+?)\s+(?:trip|vacation|there)/i);
+    const historicalCityMatch = parsedHistory
+      .filter((msg: any) => msg.role === "user")
+      .map(
+        (msg: any) =>
+          msg.content.match(
+            /to\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|next|$))/i
+          ) ||
+          msg.content.match(
+            /in\s+([a-zA-Z\s]+?)(?:\s+(?:for|and|or|with|next|$))/i
+          ) ||
+          msg.content.match(/([a-zA-Z\s]+?)\s+(?:trip|vacation|there)/i)
+      )
+      .find((match) => match);
+    const cityMatch = currentCityMatch || historicalCityMatch;
+    const city = cityMatch ? cityMatch[1].trim().toLowerCase() : null;
+    console.log("Extracted city:", city);
 
     let externalData: ExternalData = {};
 
-    // Enhanced intent detection with case-insensitive matching and broader triggers
-    const lowerInput = message.toLowerCase();
-    const isTripPlanning =
-      tripPlanningKeywords.some((keyword) =>
-        lowerInput.includes(keyword.toLowerCase())
-      ) &&
-      (country ||
-        city ||
-        lowerInput.includes("trip") ||
-        lowerInput.includes("plan") ||
-        (city && lowerInput.includes("for")));
-    const isAttractions =
-      attractionsKeywords.some((keyword) =>
-        lowerInput.includes(keyword.toLowerCase())
-      ) && city;
-    const isPacking =
-      packingKeywords.some((keyword) =>
-        lowerInput.includes(keyword.toLowerCase())
-      ) &&
-      (city || lowerInput.includes("pack") || lowerInput.includes("bring"));
-    console.log("Intents:", { isTripPlanning, isAttractions, isPacking });
+    // Detect intent using sentence similarity
+    const intent = await detectIntent(message);
+    console.log("Detected Intent:", intent);
 
-    if (isTripPlanning) {
-      const countryInfo = await getCountryInfo(country);
-      console.log("Country Info fetched:", countryInfo || "None");
-      externalData = { countryInfo };
-    } else if (isAttractions || isPacking) {
+    // Fetch data for relevant intents, retry if previously failed
+    if (intent === "tripPlanning" || intent === "packingSuggestions") {
+      let countryInfo = "Country info unavailable.";
+      if (city) {
+        try {
+          const weather = await getWeather(city);
+          console.log("Weather fetched:", weather);
+          const country = weather.country;
+          if (country) {
+            countryInfo = await getCountryInfo(country);
+          }
+          const weatherString = weather.description
+            ? `Current weather: ${weather.description} with a temperature of ${weather.temperature}°C`
+            : "Weather data unavailable.";
+          externalData = { countryInfo, weather: weatherString };
+        } catch (error) {
+          console.error("Error fetching weather or country info:", error);
+          externalData = {
+            countryInfo: "Country info unavailable.",
+            weather: "Weather data unavailable.",
+          };
+        }
+      }
+      console.log("Country Info fetched:", countryInfo);
+    } else if (intent === "attractions") {
       if (city) {
         const weather = await getWeather(city);
+        const attractions = await getAttractions(city);
         console.log("Weather fetched:", weather);
-        const attractions = isAttractions ? await getAttractions(city) : null;
         console.log("Attractions fetched:", attractions || "None");
         externalData = { weather, attractions };
       } else {
@@ -183,7 +130,7 @@ app.post("/api/chat", async (req: any, res: any) => {
     );
 
     // Hallucination check for attractions
-    if (isAttractions && city && externalData.attractions) {
+    if (intent === "attractions" && city && externalData.attractions) {
       const lowerResponse = response.toLowerCase();
       const geoapifyAttractions = externalData.attractions.toLowerCase();
       const cityRegex = new RegExp(`\\b${city.toLowerCase()}(?:'s)?\\b`, "i");
