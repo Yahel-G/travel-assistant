@@ -79,9 +79,11 @@ const intents: { [key: string]: string[] } = {
 // Global variables for model and embeddings
 let model: use.UniversalSentenceEncoder;
 let intentEmbeddings: { [key: string]: tf.Tensor } = {};
+let isInitialized = false;
 
 // Load model and precompute embeddings at startup
 export async function initializeIntentDetection() {
+  if (isInitialized) return;
   model = await use.load();
   for (const [intent, examples] of Object.entries(intents)) {
     const embeddings = await model.embed(examples); // embeddings: Tensor2D
@@ -89,6 +91,7 @@ export async function initializeIntentDetection() {
     intentEmbeddings[intent] = meanEmbedding;
     embeddings.dispose();
   }
+  isInitialized = true;
   console.log("Intent detection initialized.");
 }
 
@@ -105,7 +108,9 @@ export async function detectIntent(
   userInput: string,
   threshold: number = 0.6
 ): Promise<string> {
-  if (!model) await initializeIntentDetection();
+  if (!model) {
+    throw new Error("Intent detection model not initialized.");
+  }
   const inputEmbedding2D = await model.embed([userInput]);
   const inputEmbeddingArr = (await inputEmbedding2D.array()) as number[][];
   const inputEmbedding = tf.tensor1d(inputEmbeddingArr[0]); // Make it 1D
@@ -120,15 +125,16 @@ export async function detectIntent(
       detectedIntent = intent;
     }
   }
+  inputEmbedding2D.dispose();
   return maxSimilarity >= threshold ? detectedIntent : "other";
 }
 
-// Example usage
-async function run() {
-  await initializeIntentDetection();
-  const userMessage = "What should I pack for a cold trip?";
-  const intent = await detectIntent(userMessage);
-  console.log(`Detected Intent: ${intent}`);
-}
+// Example usage (commented out to prevent unintended execution)
+// async function run() {
+//   await initializeIntentDetection();
+//   const userMessage = "What should I pack for a cold trip?";
+//   const intent = await detectIntent(userMessage);
+//   console.log(`Detected Intent: ${intent}`);
+// }
 
-run();
+// run();

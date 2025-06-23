@@ -123,9 +123,12 @@ const intents = {
 // Global variables for model and embeddings
 let model;
 let intentEmbeddings = {};
+let isInitialized = false;
 // Load model and precompute embeddings at startup
 function initializeIntentDetection() {
     return __awaiter(this, void 0, void 0, function* () {
+        if (isInitialized)
+            return;
         model = yield use.load();
         for (const [intent, examples] of Object.entries(intents)) {
             const embeddings = yield model.embed(examples); // embeddings: Tensor2D
@@ -133,6 +136,7 @@ function initializeIntentDetection() {
             intentEmbeddings[intent] = meanEmbedding;
             embeddings.dispose();
         }
+        isInitialized = true;
         console.log("Intent detection initialized.");
     });
 }
@@ -146,8 +150,9 @@ function cosineSimilarity(a, b) {
 // Detect intent from user input
 function detectIntent(userInput_1) {
     return __awaiter(this, arguments, void 0, function* (userInput, threshold = 0.6) {
-        if (!model)
-            yield initializeIntentDetection();
+        if (!model) {
+            throw new Error("Intent detection model not initialized.");
+        }
         const inputEmbedding2D = yield model.embed([userInput]);
         const inputEmbeddingArr = (yield inputEmbedding2D.array());
         const inputEmbedding = tf.tensor1d(inputEmbeddingArr[0]); // Make it 1D
@@ -160,16 +165,15 @@ function detectIntent(userInput_1) {
                 detectedIntent = intent;
             }
         }
+        inputEmbedding2D.dispose();
         return maxSimilarity >= threshold ? detectedIntent : "other";
     });
 }
-// Example usage
-function run() {
-    return __awaiter(this, void 0, void 0, function* () {
-        yield initializeIntentDetection();
-        const userMessage = "What should I pack for a cold trip?";
-        const intent = yield detectIntent(userMessage);
-        console.log(`Detected Intent: ${intent}`);
-    });
-}
-run();
+// Example usage (commented out to prevent unintended execution)
+// async function run() {
+//   await initializeIntentDetection();
+//   const userMessage = "What should I pack for a cold trip?";
+//   const intent = await detectIntent(userMessage);
+//   console.log(`Detected Intent: ${intent}`);
+// }
+// run();
