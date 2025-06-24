@@ -1,5 +1,6 @@
 import * as tf from "@tensorflow/tfjs";
 import * as use from "@tensorflow-models/universal-sentence-encoder";
+import * as fs from "fs/promises";
 
 // Define intents with example sentences
 const intents: { [key: string]: string[] } = {
@@ -84,13 +85,34 @@ let isInitialized = false;
 // Load model and precompute embeddings at startup
 export async function initializeIntentDetection() {
   if (isInitialized) return;
-  model = await use.load();
-  for (const [intent, examples] of Object.entries(intents)) {
-    const embeddings = await model.embed(examples); // embeddings: Tensor2D
-    const meanEmbedding = tf.mean(embeddings as unknown as tf.Tensor, 0); // axis=0, returns Tensor1D
-    intentEmbeddings[intent] = meanEmbedding;
-    embeddings.dispose();
+
+  // Try to load cached embeddings
+  try {
+    const cached = await fs.readFile("intent_embeddings.json", "utf-8");
+    const data = JSON.parse(cached);
+    for (const [intent, embedding] of Object.entries(data)) {
+      intentEmbeddings[intent] = tf.tensor1d(embedding as number[]);
+    }
+    console.log("Loaded intent embeddings from cache.");
+  } catch (error) {
+    model = await use.load();
+    for (const [intent, examples] of Object.entries(intents)) {
+      const embeddings = await model.embed(examples);
+      const meanEmbedding = tf.mean(embeddings as unknown as tf.Tensor, 0);
+      intentEmbeddings[intent] = meanEmbedding;
+      embeddings.dispose();
+    }
+    // Save to cache
+    const cacheData = Object.fromEntries(
+      Object.entries(intentEmbeddings).map(([intent, tensor]) => [
+        intent,
+        tensor.arraySync() as number[],
+      ])
+    );
+    await fs.writeFile("intent_embeddings.json", JSON.stringify(cacheData));
+    console.log("Computed and cached intent embeddings.");
   }
+
   isInitialized = true;
   console.log("Intent detection initialized.");
 }
