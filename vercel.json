@@ -22,7 +22,5 @@
       "status": 404,
       "dest": "dist/server.js"
     }
-  ],
-  "includeFiles": ["dist/**", "public/**"],
-  "excludeFiles": ["node_modules/**"]
+  ]
 }

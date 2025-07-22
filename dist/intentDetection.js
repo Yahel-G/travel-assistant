@@ -121,7 +121,6 @@ const intents = {
         "What Christmas markets are best?",
     ],
 };
-// Global variables for model and embeddings
 let model = null;
 let intentEmbeddings = {};
 let isInitialized = false;
@@ -129,13 +128,13 @@ function initializeIntentDetection() {
     return __awaiter(this, void 0, void 0, function* () {
         if (isInitialized)
             return;
-        // Load pre-bundled model from public/models/
-        const modelPath = `${__dirname}/../public/models`; // Relative to intentDetection.ts
-        model = yield use.load({ modelUrl: modelPath });
+        // Load pre-bundled model from public/models/ using filesystem path
+        const modelPath = `${__dirname}/../../public/models`; // Relative to dist/intentDetection.js
+        model = yield use.load({ modelUrl: `file://${modelPath}` }); // Use file:// scheme for local files
         console.log("Model loaded from bundled files.");
         // Load precomputed embeddings from public/intent_embeddings.json
         try {
-            const cached = yield fs.readFile(`${__dirname}/../public/intent_embeddings.json`, "utf-8");
+            const cached = yield fs.readFile(`${__dirname}/../../public/intent_embeddings.json`, "utf-8");
             const data = JSON.parse(cached);
             for (const [intent, embedding] of Object.entries(data)) {
                 intentEmbeddings[intent] = tf.tensor1d(embedding);

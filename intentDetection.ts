@@ -1,8 +1,6 @@
 import * as tf from "@tensorflow/tfjs";
 import * as use from "@tensorflow-models/universal-sentence-encoder";
 import * as fs from "fs/promises";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
 
 // Define intents with example sentences
 const intents: { [key: string]: string[] } = {
@@ -79,7 +77,6 @@ const intents: { [key: string]: string[] } = {
   ],
 };
 
-// Global variables for model and embeddings
 let model: any = null;
 let intentEmbeddings: { [key: string]: tf.Tensor1D } = {};
 let isInitialized = false;
@@ -87,15 +84,15 @@ let isInitialized = false;
 export async function initializeIntentDetection() {
   if (isInitialized) return;
 
-  // Load pre-bundled model from public/models/
-  const modelPath = `${__dirname}/../public/models`; // Relative to intentDetection.ts
-  model = await use.load({ modelUrl: modelPath });
+  // Load pre-bundled model from public/models/ using filesystem path
+  const modelPath = `${__dirname}/../../public/models`; // Relative to dist/intentDetection.js
+  model = await use.load({ modelUrl: `file://${modelPath}` }); // Use file:// scheme for local files
   console.log("Model loaded from bundled files.");
 
   // Load precomputed embeddings from public/intent_embeddings.json
   try {
     const cached = await fs.readFile(
-      `${__dirname}/../public/intent_embeddings.json`,
+      `${__dirname}/../../public/intent_embeddings.json`,
       "utf-8"
     );
     const data = JSON.parse(cached);
