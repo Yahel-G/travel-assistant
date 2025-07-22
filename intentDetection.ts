@@ -86,6 +86,10 @@ let isInitialized = false;
 export async function initializeIntentDetection() {
   if (isInitialized) return;
 
+  // Always load the model
+  model = await use.load();
+  console.log("Model loaded.");
+
   // Try to load cached embeddings
   try {
     const cached = await fs.readFile("intent_embeddings.json", "utf-8");
@@ -95,7 +99,7 @@ export async function initializeIntentDetection() {
     }
     console.log("Loaded intent embeddings from cache.");
   } catch (error) {
-    model = await use.load();
+    console.log("Cache load failed, computing embeddings:", error);
     for (const [intent, examples] of Object.entries(intents)) {
       const embeddings = await model.embed(examples);
       const meanEmbedding = tf.mean(embeddings as unknown as tf.Tensor, 0);
@@ -150,13 +154,3 @@ export async function detectIntent(
   inputEmbedding2D.dispose();
   return maxSimilarity >= threshold ? detectedIntent : "other";
 }
-
-// Example usage (commented out to prevent unintended execution)
-// async function run() {
-//   await initializeIntentDetection();
-//   const userMessage = "What should I pack for a cold trip?";
-//   const intent = await detectIntent(userMessage);
-//   console.log(`Detected Intent: ${intent}`);
-// }
-
-// run();
