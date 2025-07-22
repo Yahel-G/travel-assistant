@@ -46,6 +46,7 @@ exports.initializeIntentDetection = initializeIntentDetection;
 exports.detectIntent = detectIntent;
 const tf = __importStar(require("@tensorflow/tfjs"));
 const use = __importStar(require("@tensorflow-models/universal-sentence-encoder"));
+const fs = __importStar(require("fs/promises"));
 // Define intents with example sentences
 const intents = {
     tripPlanning: [
@@ -129,12 +130,30 @@ function initializeIntentDetection() {
     return __awaiter(this, void 0, void 0, function* () {
         if (isInitialized)
             return;
-        model = yield use.load();
-        for (const [intent, examples] of Object.entries(intents)) {
-            const embeddings = yield model.embed(examples); // embeddings: Tensor2D
-            const meanEmbedding = tf.mean(embeddings, 0); // axis=0, returns Tensor1D
-            intentEmbeddings[intent] = meanEmbedding;
-            embeddings.dispose();
+        // Try to load cached embeddings
+        try {
+            const cached = yield fs.readFile("intent_embeddings.json", "utf-8");
+            const data = JSON.parse(cached);
+            for (const [intent, embedding] of Object.entries(data)) {
+                intentEmbeddings[intent] = tf.tensor1d(embedding);
+            }
+            console.log("Loaded intent embeddings from cache.");
+        }
+        catch (error) {
+            model = yield use.load();
+            for (const [intent, examples] of Object.entries(intents)) {
+                const embeddings = yield model.embed(examples);
+                const meanEmbedding = tf.mean(embeddings, 0);
+                intentEmbeddings[intent] = meanEmbedding;
+                embeddings.dispose();
+            }
+            // Save to cache
+            const cacheData = Object.fromEntries(Object.entries(intentEmbeddings).map(([intent, tensor]) => [
+                intent,
+                tensor.arraySync(),
+            ]));
+            yield fs.writeFile("intent_embeddings.json", JSON.stringify(cacheData));
+            console.log("Computed and cached intent embeddings.");
         }
         isInitialized = true;
         console.log("Intent detection initialized.");
