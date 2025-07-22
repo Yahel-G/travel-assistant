@@ -41,6 +41,27 @@ interface ExternalData {
   countryInfo?: any;
 }
 
+async function initializeWithRetry(
+  maxRetries = 3,
+  delayMs = 1000
+): Promise<void> {
+  let retries = 0;
+  while (retries < maxRetries) {
+    try {
+      await intentInitialization;
+      if (isIntentInitialized) return; // Success
+      throw new Error("Initialization still failed after attempt.");
+    } catch (error) {
+      retries++;
+      console.error(`Initialization attempt ${retries} failed:`, error);
+      if (retries === maxRetries) throw error;
+      const backoff = delayMs * Math.pow(2, retries - 1); // Exponential backoff
+      console.log(`Retrying in ${backoff}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+}
+
 app.post("/api/chat", async (req: any, res: any) => {
   console.log("Received /api/chat request:", req.body);
   const { message, username } = req.body;
@@ -61,22 +82,14 @@ app.post("/api/chat", async (req: any, res: any) => {
     if (!isIntentInitialized) {
       console.log("Initializing intent detection...");
       try {
-        await intentInitialization; // Wait for initialization
-        if (!isIntentInitialized) {
-          throw new Error("Intent detection initialization failed.");
-        }
+        await initializeWithRetry(); // Use enhanced retry logic
         console.log("Intent detection initialized and ready.");
       } catch (error) {
-        console.error("Initialization error, retrying...", error);
-        // Optional: Add retry logic here (e.g., retry up to 3 times)
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
-        await intentInitialization; // Retry once
-        if (!isIntentInitialized) {
-          throw new Error(
-            "Intent detection initialization failed after retry."
-          );
-        }
-        console.log("Intent detection initialized after retry.");
+        console.error("All initialization attempts failed:", error);
+        // Fallback: Proceed with a default intent if initialization fails
+        console.warn(
+          "Falling back to default intent 'other' due to initialization failure."
+        );
       }
     }
 
@@ -124,7 +137,7 @@ app.post("/api/chat", async (req: any, res: any) => {
 
     let externalData: ExternalData = {};
 
-    const intent = await detectIntent(message);
+    const intent = isIntentInitialized ? await detectIntent(message) : "other"; // Fallback intent
     console.log("Detected Intent:", intent);
 
     // Fetch external data only if a valid city is present
