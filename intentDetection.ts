@@ -1,6 +1,8 @@
 import * as tf from "@tensorflow/tfjs";
 import * as use from "@tensorflow-models/universal-sentence-encoder";
 import * as fs from "fs/promises";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
 // Define intents with example sentences
 const intents: { [key: string]: string[] } = {
@@ -78,79 +80,57 @@ const intents: { [key: string]: string[] } = {
 };
 
 // Global variables for model and embeddings
-let model: use.UniversalSentenceEncoder;
-let intentEmbeddings: { [key: string]: tf.Tensor } = {};
+let model: any = null;
+let intentEmbeddings: { [key: string]: tf.Tensor1D } = {};
 let isInitialized = false;
 
-// Load model and precompute embeddings at startup
 export async function initializeIntentDetection() {
   if (isInitialized) return;
 
-  // Always load the model
-  model = await use.load();
-  console.log("Model loaded.");
+  // Load pre-bundled model from public/models/
+  const modelPath = `${__dirname}/../public/models`; // Relative to intentDetection.ts
+  model = await use.load({ modelUrl: modelPath });
+  console.log("Model loaded from bundled files.");
 
-  // Try to load cached embeddings
+  // Load precomputed embeddings from public/intent_embeddings.json
   try {
-    const cached = await fs.readFile("intent_embeddings.json", "utf-8");
+    const cached = await fs.readFile(
+      `${__dirname}/../public/intent_embeddings.json`,
+      "utf-8"
+    );
     const data = JSON.parse(cached);
     for (const [intent, embedding] of Object.entries(data)) {
       intentEmbeddings[intent] = tf.tensor1d(embedding as number[]);
     }
-    console.log("Loaded intent embeddings from cache.");
+    console.log("Loaded intent embeddings from bundled cache.");
   } catch (error) {
-    console.log("Cache load failed, computing embeddings:", error);
-    for (const [intent, examples] of Object.entries(intents)) {
-      const embeddings = await model.embed(examples);
-      const meanEmbedding = tf.mean(embeddings as unknown as tf.Tensor, 0);
-      intentEmbeddings[intent] = meanEmbedding;
-      embeddings.dispose();
-    }
-    // Save to cache
-    const cacheData = Object.fromEntries(
-      Object.entries(intentEmbeddings).map(([intent, tensor]) => [
-        intent,
-        tensor.arraySync() as number[],
-      ])
+    console.error("Failed to load bundled embeddings:", error);
+    throw new Error(
+      "Intent detection initialization failed due to missing embeddings."
     );
-    await fs.writeFile("intent_embeddings.json", JSON.stringify(cacheData));
-    console.log("Computed and cached intent embeddings.");
   }
 
   isInitialized = true;
   console.log("Intent detection initialized.");
 }
 
-// Cosine similarity function
-function cosineSimilarity(a: tf.Tensor, b: tf.Tensor): number {
-  const dotProduct = tf.tidy(() => tf.sum(tf.mul(a, b)).arraySync() as number);
-  const normA = tf.tidy(() => a.norm().arraySync() as number);
-  const normB = tf.tidy(() => b.norm().arraySync() as number);
-  return dotProduct / (normA * normB);
-}
-
-// Detect intent from user input
-export async function detectIntent(
-  userInput: string,
-  threshold: number = 0.6
-): Promise<string> {
-  if (!model) {
+export async function detectIntent(message: string): Promise<string> {
+  if (!isInitialized)
     throw new Error("Intent detection model not initialized.");
-  }
-  const inputEmbedding2D = await model.embed([userInput]);
-  const inputEmbeddingArr = (await inputEmbedding2D.array()) as number[][];
-  const inputEmbedding = tf.tensor1d(inputEmbeddingArr[0]); // Make it 1D
+  const embedding = await model.embed([message]);
+  let maxSimilarity = -Infinity;
+  let bestIntent = "other";
 
-  let maxSimilarity = -1;
-  let detectedIntent = "other";
-
-  for (const [intent, embedding] of Object.entries(intentEmbeddings)) {
-    const similarity = cosineSimilarity(inputEmbedding, embedding);
+  for (const [intent, intentEmbedding] of Object.entries(intentEmbeddings)) {
+    const similarity = await tf.losses
+      .cosineDistance(embedding, intentEmbedding, 0)
+      .neg()
+      .dataSync()[0];
     if (similarity > maxSimilarity) {
       maxSimilarity = similarity;
-      detectedIntent = intent;
+      bestIntent = intent;
     }
   }
-  inputEmbedding2D.dispose();
-  return maxSimilarity >= threshold ? detectedIntent : "other";
+  embedding.dispose();
+  return bestIntent;
 }

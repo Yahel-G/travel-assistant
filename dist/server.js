@@ -40,6 +40,28 @@ intentInitialization = (0, intentDetection_1.initializeIntentDetection)()
 });
 app.use(express_1.default.json());
 app.use(express_1.default.static("public"));
+function initializeWithRetry() {
+    return __awaiter(this, arguments, void 0, function* (maxRetries = 3, delayMs = 1000) {
+        let retries = 0;
+        while (retries < maxRetries) {
+            try {
+                yield intentInitialization;
+                if (isIntentInitialized)
+                    return; // Success
+                throw new Error("Initialization still failed after attempt.");
+            }
+            catch (error) {
+                retries++;
+                console.error(`Initialization attempt ${retries} failed:`, error);
+                if (retries === maxRetries)
+                    throw error;
+                const backoff = delayMs * Math.pow(2, retries - 1); // Exponential backoff
+                console.log(`Retrying in ${backoff}ms...`);
+                yield new Promise((resolve) => setTimeout(resolve, backoff));
+            }
+        }
+    });
+}
 app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     console.log("Received /api/chat request:", req.body);
     const { message, username } = req.body;
@@ -56,21 +78,13 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
         if (!isIntentInitialized) {
             console.log("Initializing intent detection...");
             try {
-                yield intentInitialization; // Wait for initialization
-                if (!isIntentInitialized) {
-                    throw new Error("Intent detection initialization failed.");
-                }
+                yield initializeWithRetry(); // Use enhanced retry logic
                 console.log("Intent detection initialized and ready.");
             }
             catch (error) {
-                console.error("Initialization error, retrying...", error);
-                // Optional: Add retry logic here (e.g., retry up to 3 times)
-                yield new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
-                yield intentInitialization; // Retry once
-                if (!isIntentInitialized) {
-                    throw new Error("Intent detection initialization failed after retry.");
-                }
-                console.log("Intent detection initialized after retry.");
+                console.error("All initialization attempts failed:", error);
+                // Fallback: Proceed with a default intent if initialization fails
+                console.warn("Falling back to default intent 'other' due to initialization failure.");
             }
         }
         const { data: history } = yield supabase
@@ -104,7 +118,7 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
             }
         }
         let externalData = {};
-        const intent = yield (0, intentDetection_1.detectIntent)(message);
+        const intent = isIntentInitialized ? yield (0, intentDetection_1.detectIntent)(message) : "other"; // Fallback intent
         console.log("Detected Intent:", intent);
         // Fetch external data only if a valid city is present
         if (city &&

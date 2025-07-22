@@ -1,29 +1,28 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "dist/server.js",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "public/**",
-        "use": "@vercel/static"
-      }
-    ],
-    "routes": [
-      {
-        "src": "/api/chat",
-        "methods": ["POST"],
-        "dest": "dist/server.js"
-      },
-      {
-        "src": "/health",
-        "methods": ["GET"],
-        "dest": "dist/server.js"
-      },
-      {
-        "src": "/(.*)",
-        "dest": "public/$1"
-      }
-    ]
-  }
+  "version": 2,
+  "builds": [
+    {
+      "src": "dist/server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/chat",
+      "methods": ["POST"],
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/health",
+      "methods": ["GET"],
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/(.*)",
+      "status": 404,
+      "dest": "dist/server.js"
+    }
+  ],
+  "includeFiles": ["dist/**", "public/**"],
+  "excludeFiles": ["node_modules/**"]
+}
