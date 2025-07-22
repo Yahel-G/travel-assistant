@@ -202,6 +202,7 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 }));
 if (process.env.NODE_ENV === "debug") {
+    process.env.NODE_ENV = "development"; // Set development mode for local testing
     (() => __awaiter(void 0, void 0, void 0, function* () { return console.log(yield (0, weatherApi_1.getWeather)("New York")); }))();
 }
 app.get("/health", (req, res) => {

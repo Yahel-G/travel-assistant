@@ -47,6 +47,7 @@ exports.detectIntent = detectIntent;
 const tf = __importStar(require("@tensorflow/tfjs"));
 const use = __importStar(require("@tensorflow-models/universal-sentence-encoder"));
 const fs = __importStar(require("fs/promises"));
+const path = __importStar(require("path"));
 // Define intents with example sentences
 const intents = {
     tripPlanning: [
@@ -124,17 +125,41 @@ const intents = {
 let model = null;
 let intentEmbeddings = {};
 let isInitialized = false;
+function loadModelWithRetry(url_1) {
+    return __awaiter(this, arguments, void 0, function* (url, retries = 3, delayMs = 1000) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                return yield use.load({ modelUrl: url });
+            }
+            catch (error) {
+                if (i === retries - 1)
+                    throw error;
+                console.log(`Model load attempt ${i + 1} failed, retrying in ${delayMs}ms...`, error);
+                yield new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
+        }
+    });
+}
 function initializeIntentDetection() {
     return __awaiter(this, void 0, void 0, function* () {
         if (isInitialized)
             return;
-        // Load pre-bundled model from public/models/ using filesystem path
-        const modelPath = `${__dirname}/../../public/models`; // Relative to dist/intentDetection.js
-        model = yield use.load({ modelUrl: `file://${modelPath}` }); // Use file:// scheme for local files
-        console.log("Model loaded from bundled files.");
-        // Load precomputed embeddings from public/intent_embeddings.json
+        const isLocal = process.env.NODE_ENV === "development" || !process.env.NODE_ENV;
+        const modelBaseUrl = isLocal
+            ? "http://127.0.0.1:8081/models/model.json"
+            : "/public/models/model.json";
+        console.log("Attempting to load model from:", modelBaseUrl);
         try {
-            const cached = yield fs.readFile(`${__dirname}/../../public/intent_embeddings.json`, "utf-8");
+            model = yield loadModelWithRetry(modelBaseUrl);
+            console.log("Model loaded from bundled files.");
+        }
+        catch (error) {
+            console.error("Model loading failed:", error);
+            throw new Error(`Failed to initialize intent detection: ${error.message}`);
+        }
+        try {
+            const embeddingsPath = path.resolve(__dirname, "../public/intent_embeddings.json");
+            const cached = yield fs.readFile(embeddingsPath, "utf-8");
             const data = JSON.parse(cached);
             for (const [intent, embedding] of Object.entries(data)) {
                 intentEmbeddings[intent] = tf.tensor1d(embedding);

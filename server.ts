@@ -257,6 +257,7 @@ app.post("/api/chat", async (req: any, res: any) => {
 });
 
 if (process.env.NODE_ENV === "debug") {
+  process.env.NODE_ENV = "development"; // Set development mode for local testing
   (async () => console.log(await getWeather("New York")))();
 }
 

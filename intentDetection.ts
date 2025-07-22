@@ -1,6 +1,7 @@
 import * as tf from "@tensorflow/tfjs";
 import * as use from "@tensorflow-models/universal-sentence-encoder";
 import * as fs from "fs/promises";
+import * as path from "path";
 
 // Define intents with example sentences
 const intents: { [key: string]: string[] } = {
@@ -81,20 +82,45 @@ let model: any = null;
 let intentEmbeddings: { [key: string]: tf.Tensor1D } = {};
 let isInitialized = false;
 
+async function loadModelWithRetry(url: string, retries = 3, delayMs = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await use.load({ modelUrl: url });
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      console.log(
+        `Model load attempt ${i + 1} failed, retrying in ${delayMs}ms...`,
+        error
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 export async function initializeIntentDetection() {
   if (isInitialized) return;
 
-  // Load pre-bundled model from public/models/ using filesystem path
-  const modelPath = `${__dirname}/../../public/models`; // Relative to dist/intentDetection.js
-  model = await use.load({ modelUrl: `file://${modelPath}` }); // Use file:// scheme for local files
-  console.log("Model loaded from bundled files.");
+  const isLocal =
+    process.env.NODE_ENV === "development" || !process.env.NODE_ENV;
+  const modelBaseUrl = isLocal
+    ? "http://127.0.0.1:8081/models/model.json"
+    : "/public/models/model.json";
+  console.log("Attempting to load model from:", modelBaseUrl);
 
-  // Load precomputed embeddings from public/intent_embeddings.json
   try {
-    const cached = await fs.readFile(
-      `${__dirname}/../../public/intent_embeddings.json`,
-      "utf-8"
+    model = await loadModelWithRetry(modelBaseUrl);
+    console.log("Model loaded from bundled files.");
+  } catch (error: any) {
+    console.error("Model loading failed:", error);
+    throw new Error(`Failed to initialize intent detection: ${error.message}`);
+  }
+
+  try {
+    const embeddingsPath = path.resolve(
+      __dirname,
+      "../public/intent_embeddings.json"
     );
+    const cached = await fs.readFile(embeddingsPath, "utf-8");
     const data = JSON.parse(cached);
     for (const [intent, embedding] of Object.entries(data)) {
       intentEmbeddings[intent] = tf.tensor1d(embedding as number[]);
