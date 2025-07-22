@@ -32,10 +32,11 @@ let intentInitialization;
 intentInitialization = (0, intentDetection_1.initializeIntentDetection)()
     .then(() => {
     isIntentInitialized = true;
-    console.log("Intent detection initialized at startup.");
+    console.log("Intent detection initialized successfully.");
 })
     .catch((error) => {
     console.error("Failed to initialize intent detection:", error);
+    isIntentInitialized = false; // Ensure flag reflects failure
 });
 app.use(express_1.default.json());
 app.use(express_1.default.static("public"));
@@ -54,8 +55,23 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
         // Ensure intent detection is initialized before proceeding
         if (!isIntentInitialized) {
             console.log("Initializing intent detection...");
-            yield intentInitialization; // Wait for initialization to complete
-            console.log("Intent detection initialized.");
+            try {
+                yield intentInitialization; // Wait for initialization
+                if (!isIntentInitialized) {
+                    throw new Error("Intent detection initialization failed.");
+                }
+                console.log("Intent detection initialized and ready.");
+            }
+            catch (error) {
+                console.error("Initialization error, retrying...", error);
+                // Optional: Add retry logic here (e.g., retry up to 3 times)
+                yield new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
+                yield intentInitialization; // Retry once
+                if (!isIntentInitialized) {
+                    throw new Error("Intent detection initialization failed after retry.");
+                }
+                console.log("Intent detection initialized after retry.");
+            }
         }
         const { data: history } = yield supabase
             .from("conversation_history")
