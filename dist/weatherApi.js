@@ -56,9 +56,16 @@ function getWeather(city) {
             const apiKey = process.env.WEATHER_API_KEY;
             if (!apiKey)
                 throw new Error("OpenWeatherMap API key not configured");
+            // Handle ambiguous cities by appending country code if needed
+            let queryCity = city.toLowerCase();
+            const countryOverrides = {
+                mexico: "mexico, MX",
+                // Add other ambiguous cities as needed (e.g., "vancouver, CA" for Canada)
+            };
+            queryCity = countryOverrides[queryCity] || queryCity;
             const response = yield axios_1.default.get(WEATHER_API_URL, {
                 params: {
-                    q: city,
+                    q: queryCity,
                     appid: apiKey,
                     units: "metric",
                 },
@@ -67,7 +74,7 @@ function getWeather(city) {
             return {
                 description: data.weather[0].description,
                 temperature: data.main.temp,
-                country: data.sys.country, // e.g., "US" for United States
+                country: data.sys.country,
             };
         }
         catch (error) {
@@ -76,3 +83,4 @@ function getWeather(city) {
         }
     });
 }
+module.exports = { getWeather };

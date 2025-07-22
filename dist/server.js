@@ -26,7 +26,7 @@ const app = (0, express_1.default)();
 const port = process.env.PORT || 8080;
 const conversation = new conversationManager_1.ConversationManager();
 const supabase = (0, supabase_js_1.createClient)(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-// Start initialization in the background
+// Start initialization in the background (optional, will be overridden per request)
 let isIntentInitialized = false;
 let intentInitialization;
 intentInitialization = (0, intentDetection_1.initializeIntentDetection)()
@@ -51,10 +51,11 @@ app.post("/api/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* 
     const userId = username.trim();
     const sessionId = "default";
     try {
+        // Ensure intent detection is initialized before proceeding
         if (!isIntentInitialized) {
-            console.log("Waiting for intent detection initialization...");
-            yield intentInitialization;
-            console.log("Intent detection ready for use.");
+            console.log("Initializing intent detection...");
+            yield intentInitialization; // Wait for initialization to complete
+            console.log("Intent detection initialized.");
         }
         const { data: history } = yield supabase
             .from("conversation_history")

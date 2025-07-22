@@ -18,7 +18,7 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY!
 );
 
-// Start initialization in the background
+// Start initialization in the background (optional, will be overridden per request)
 let isIntentInitialized = false;
 let intentInitialization: Promise<void>;
 
@@ -56,10 +56,11 @@ app.post("/api/chat", async (req: any, res: any) => {
   const sessionId = "default";
 
   try {
+    // Ensure intent detection is initialized before proceeding
     if (!isIntentInitialized) {
-      console.log("Waiting for intent detection initialization...");
-      await intentInitialization;
-      console.log("Intent detection ready for use.");
+      console.log("Initializing intent detection...");
+      await intentInitialization; // Wait for initialization to complete
+      console.log("Intent detection initialized.");
     }
 
     const { data: history } = await supabase
